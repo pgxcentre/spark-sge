@@ -22,9 +22,7 @@ def main():
     # Deleting the tasks in reverse order (master is the first)
     for task_id in task_ids[::-1]:
         print("Deleting task", task_id)
-        subprocess.Popen([
-            "qdel", task_id,
-        ])
+        subprocess.Popen(["qdel", task_id])
         time.sleep(1)
 
     print("Deleted all the registered jobs.")

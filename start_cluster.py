@@ -17,6 +17,9 @@ from os import path
 
 
 def main(args):
+    # Getting the binary path
+    bin_path = path.abspath(path.dirname(__file__))
+
     # The job IDs (the first one is always the worker
     job_ids = []
 
@@ -24,7 +27,7 @@ def main(args):
     master_command = ["qsub", "-terse"]
     if args.master_host is not None:
         master_command.extend(["-q", args.master_host])
-    master_command.append("_start_master.sh")
+    master_command.append(path.join(bin_path, "_start_master.sh"))
 
     # Launching the command
     p = subprocess.Popen(master_command, stdout=subprocess.PIPE)
@@ -34,7 +37,9 @@ def main(args):
 
     # Getting the host on which the job is running
     master_hostname = get_hostname_of_job_id(job_ids[0])
+    monitor_hostname = get_monitor_hostname(master_hostname)
     print("Master running at", master_hostname)
+    print("Spark server monitor at", monitor_hostname)
 
     processes = []
     for i in range(args.nb_workers):
@@ -42,7 +47,7 @@ def main(args):
                    "SPARK_MASTER_HOSTNAME={}".format(master_hostname)]
         command = [
             "qsub", "-terse", "-pe", "multiprocess", str(args.nb_cpus),
-            "-v", ",".join(options), "_start_slave.sh"
+            "-v", ",".join(options), path.join(bin_path, "_start_slave.sh"),
         ]
         p = subprocess.Popen(command, stdout=subprocess.PIPE)
         processes.append(p)
@@ -89,6 +94,10 @@ def get_hostname_of_job_id(job_id):
         time.sleep(1)
 
     return hostname
+
+
+def get_monitor_hostname(hostname):
+    return re.sub("[0-9]+$", "8080", re.sub("^spark", "http", hostname))
 
 
 def _strip_pid(s):
