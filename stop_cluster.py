@@ -4,7 +4,10 @@
 Stop a Spark cluster given a spark_cluster.pkl file.
 """
 
+from __future__ import print_function
+
 import sys
+import time
 import pickle
 import subprocess
 
@@ -16,10 +19,13 @@ def main():
     with open(sys.argv[1], "rb") as f:
         task_ids = pickle.load(f)
 
-    for task_id in task_ids:
+    # Deleting the tasks in reverse order (master is the first)
+    for task_id in task_ids[::-1]:
+        print("Deleting task", task_id)
         subprocess.Popen([
             "qdel", task_id,
         ])
+        time.sleep(1)
 
     print("Deleted all the registered jobs.")
 
