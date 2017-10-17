@@ -4,88 +4,112 @@
 Start a Spark cluster on top of an SGE cluster.
 """
 
+
+from __future__ import print_function
+
+import os
+import re
+import time
 import pickle
 import argparse
 import subprocess
-
-
-SERVERS = [
-    ("srapl-sg-cn001", 48),
-    ("srapl-sg-cn002", 48),
-    ("srapl-sg-cn003", 48),
-    ("srapl-sg-cn004", 48),
-    ("srapl-sg-cn005", 48),
-    ("srapl-sg-cnc06", 16),
-    ("srapl-sg-cnc07", 16),
-    ("srapl-sg-cnc08", 16),
-    ("srapl-sg-cnc09", 16),
-    ("srapl-sg-cnc10", 16),
-    ("srapl-sg-cnc11", 16),
-    ("srapl-sg-cnc12", 16),
-    ("srapl-sg-cnc13", 16),
-    ("srapl-sg-cnc14", 16),
-]
+from os import path
 
 
 def main(args):
-    process_ids = []
+    # The job IDs (the first one is always the worker
+    job_ids = []
 
-    small_nodes_queue = []
+    # The master command
+    master_command = ["qsub", "-terse"]
+    if args.master_host is not None:
+        master_command.extend(["-q", args.master_host])
+    master_command.append("_start_master.sh")
 
-    # Create the queues as arguments for qsub.
-    for server, n_cpus in SERVERS:
-        if n_cpus == 16:
-            small_nodes_queue.extend([
-                "-q", "all.q@" + server,
-            ])
-
-    command = ["qsub"]
-    command.extend(small_nodes_queue)
-    command.extend(["-terse", "./_start_master.sh"])
-
-    print(command)
-    p = subprocess.Popen(command, stdout=subprocess.PIPE)
-
-    # Function to parse the process ID.
-    def _strip_pid(s):
-        return s.decode("utf-8").strip()
+    # Launching the command
+    p = subprocess.Popen(master_command, stdout=subprocess.PIPE)
 
     # Remember the process ID.
-    process_ids.append(_strip_pid(p.stdout.read()))
+    job_ids.append(_strip_pid(p.stdout.read()))
+
+    # Getting the host on which the job is running
+    master_hostname = get_hostname_of_job_id(job_ids[0])
+    print("Master running at", master_hostname)
 
     processes = []
-    for i in range(args.n_workers):
+    for i in range(args.nb_workers):
+        options = ["SPARK_SLAVES_NB_CORES={}".format(args.nb_cpus),
+                   "SPARK_MASTER_HOSTNAME={}".format(master_hostname)]
         command = [
-            "qsub", "-terse", "-pe", "multiprocess", "16", "./_start_slave.sh"
+            "qsub", "-terse", "-pe", "multiprocess", str(args.nb_cpus),
+            "-v", ",".join(options), "_start_slave.sh"
         ]
-        print(command)
         p = subprocess.Popen(command, stdout=subprocess.PIPE)
         processes.append(p)
 
     # I do this in two stages so that we don't have to wait for a task to start
     # submit the next one.
     for p in processes:
-        process_ids.append(_strip_pid(p.stdout.read()))
+        job_ids.append(_strip_pid(p.stdout.read()))
 
     filename = "spark_cluster.pkl"
     print("Started the Spark cluster, saving the task IDs to '{}'."
           "".format(filename))
 
     with open(filename, "wb") as f:
-        pickle.dump(process_ids, f)
+        pickle.dump(job_ids, f)
+
+
+def get_hostname_of_job_id(job_id):
+    # Checking if the job was launched
+    command = ["qstat", "-j", job_id]
+
+    # Waiting that the job is launched
+    while True:
+        time.sleep(1)
+        p = subprocess.Popen(command, stdout=subprocess.PIPE)
+        job_info = p.stdout.read().decode("utf-8")
+        if u"usage" in job_info:
+            break
+
+    # Waiting that the log file appears (NFS, network issue, etc)
+    log_file = "_spark_master.e{}".format(job_id)
+    while not path.isfile(log_file):
+        time.sleep(1)
+    while os.stat(log_file).st_size < 1:
+        time.sleep(1)
+
+    # Reading the log
+    hostname = None
+    while hostname is None:
+        with open(log_file) as f:
+            for line in f:
+                if "INFO Master: Starting Spark master at" in line:
+                    hostname = re.search(r"spark://\S+", line).group()
+        time.sleep(1)
+
+    return hostname
+
+
+def _strip_pid(s):
+    return s.decode("utf-8").strip()
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--master-host",
-        default=None
+        "--master-host", metavar="HOST",
+        help="The host of the master (e.g. all.q@srapl-sg-cnc14).",
     )
 
     parser.add_argument(
-        "--n-workers",
-        default=2,
+        "--nb-workers", metavar="INT", default=2, type=int,
+        help="The number of workers to spawn. [%(default)d]",
+    )
+    parser.add_argument(
+        "--nb-cpus", metavar="INT", default=10, type=int,
+        help="The number of CPUs for each worker. [%(default)d]",
     )
 
     return parser.parse_args()
