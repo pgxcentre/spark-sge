@@ -1,9 +1,16 @@
 #!/bin/bash
+
 #$ -V
 #$ -cwd
 #$ -S /bin/bash
-#$ -N _spark_master
+#$ -N _spark_slave
+
+
+# Loading the module
+module load spark/2.1.0
+
+# Making sure Spark is not daemonize (running in foreground)
+export SPARK_NO_DAEMONIZE=yes
 
 echo "Starting spark slave"
-
-sleep infinity
+$SPARK_HOME/sbin/start-slave.sh -c $SPARK_SLAVES_NB_CORES $SPARK_MASTER_HOSTNAME
