@@ -24,7 +24,8 @@ def main(args):
     job_ids = []
 
     # The master command
-    master_command = ["qsub", "-terse"]
+    options = ["SPARK_VERSION={}".format(args.spark_version)]
+    master_command = ["qsub", "-terse", "-v", ",".join(options)]
     if args.master_host is not None:
         master_command.extend(["-q", args.master_host])
     master_command.append(path.join(bin_path, "_start_master.sh"))
@@ -44,7 +45,8 @@ def main(args):
     processes = []
     for i in range(args.nb_workers):
         options = ["SPARK_SLAVES_NB_CORES={}".format(args.nb_cpus),
-                   "SPARK_MASTER_HOSTNAME={}".format(master_hostname)]
+                   "SPARK_MASTER_HOSTNAME={}".format(master_hostname),
+                   "SPARK_VERSION={}".format(args.spark_version)]
         command = [
             "qsub", "-terse", "-pe", "multiprocess", str(args.nb_cpus),
             "-v", ",".join(options), path.join(bin_path, "_start_slave.sh"),
@@ -107,6 +109,10 @@ def _strip_pid(s):
 def parse_args():
     parser = argparse.ArgumentParser()
 
+    parser.add_argument(
+        "--spark-version", metavar="VERSIOn", default="2.1.0",
+        help="The version of spark. [%(default)s]",
+    )
     parser.add_argument(
         "--master-host", metavar="HOST",
         help="The host of the master (e.g. all.q@srapl-sg-cnc14).",

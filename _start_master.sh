@@ -7,7 +7,7 @@
 
 
 # Loading the module
-module load spark/2.1.0
+module load spark/$SPARK_VERSION
 
 # Making sure Spark is not daemonize (running in foreground)
 export SPARK_NO_DAEMONIZE=yes
