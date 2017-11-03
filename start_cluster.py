@@ -46,7 +46,8 @@ def main(args):
     for i in range(args.nb_workers):
         options = ["SPARK_SLAVES_NB_CORES={}".format(args.nb_cpus),
                    "SPARK_MASTER_HOSTNAME={}".format(master_hostname),
-                   "SPARK_VERSION={}".format(args.spark_version)]
+                   "SPARK_VERSION={}".format(args.spark_version),
+                   "SPARK_SLAVE_NB={}".format(i+1)]
         command = [
             "qsub", "-terse", "-pe", "multiprocess", str(args.nb_cpus),
             "-v", ",".join(options), path.join(bin_path, "_start_slave.sh"),
